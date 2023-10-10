@@ -1,0 +1,538 @@
+<html>
+<title>P5JS MIDI Toy</title>
+
+<style>
+.custDIVClass
+{
+	margin: 0px;
+	padding: 0px;
+	background-color: #000000;
+	border: 1px solid #aaaaaa;
+	z-index: 2;
+} 
+.sliderClass
+{
+	height: 50;
+	width:	100px;
+}
+#container {
+  position: relative;
+}
+#container canvas, #overlay {
+  position: absolute;
+}
+canvas {
+  border: 1px solid black;
+}
+</style>
+
+<body>
+
+<div id='container'>
+  <canvas id='mainCanvas'></canvas>
+  <div id='overlay'>
+  </div>
+</div>
+
+</body>
+<script src="p5.js"></script>
+<script language="JavaScript">
+
+class objectTracker
+{	
+	constructor(numberOfItems)
+	{
+		this.objectArray = new Array();
+		this.numberOfItems=0;
+		this.innerCounter=0;
+		this.randomRange = [1000,1000,1000,1000,1000,1000];
+		
+		for(this.innerCounter=0; this.innerCounter<numberOfItems; this.innerCounter++)
+		{
+								 //XpYpZp R G B A  XsYsZs
+			this.objectArray.push([0,0,0, 0,0,0,0, 0,0,0]);
+		}
+		this.numberOfItems = this.objectArray.length;
+	}
+	reset =  function(index)
+	{
+		this.objectArray[index][0] = 0;
+		this.objectArray[index][1] = 0;
+		this.objectArray[index][2] = 0;
+		//reset colour
+		this.objectArray[index][3] = 0;
+		this.objectArray[index][4] = 0;
+		this.objectArray[index][5] = 0;
+		this.objectArray[index][6] = 0;
+		//reset size
+		this.objectArray[index][7] = 0;
+		this.objectArray[index][8] = 0;
+		this.objectArray[index][9] = 0;
+	}
+	newSize = function(newCount)
+	{
+		if(newCount<this.numberOfItems)
+		{
+			this.objectArray = this.objectArray.slice(0,newCount);
+			this.numberOfItems = this.objectArray.length;
+		}
+		else
+		{
+			this.clear();
+			for(this.innerCounter=0; this.innerCounter<newCount; this.innerCounter++)
+			{
+				this.objectArray.push([0,0,0, 0,0,0,0, 0,0,0]);
+			}
+			this.numberOfItems = this.objectArray.length;
+		}
+	}
+	clear = function()
+	{
+		this.objectArray = this.objectArray.slice(0,0);
+		this.numberOfItems = this.objectArray.length;
+	}
+	randomizePostion = function(index)
+	{
+		//random position
+		this.objectArray[index][0] = Math.round(Math.random()*this.randomRange[0]);
+		this.objectArray[index][1] = Math.round(Math.random()*this.randomRange[1]);
+		this.objectArray[index][2] = Math.round(Math.random()*this.randomRange[2]);
+		//random size
+		this.objectArray[index][7] = Math.round(Math.random()*this.randomRange[3]);
+		this.objectArray[index][8] = Math.round(Math.random()*this.randomRange[4]);
+		this.objectArray[index][9] = Math.round(Math.random()*this.randomRange[5]);
+	}
+	setColour = function(index, redV, greenV, blueV, alphaV)
+	{
+		this.objectArray[index][3] = redV;
+		this.objectArray[index][4] = greenV;
+		this.objectArray[index][5] = blueV;
+		this.objectArray[index][6] = alphaV;
+	}
+}
+
+class MIDIMapper
+{	
+	constructor()
+	{
+		this.midiMapArray = new Array();
+		this.numberOfItems=0;
+		this.innerCounter=0;
+		this.lastKeyHit=0;
+		this.lastKeyReleased=0;
+		this.midiKeyRange = [48,84];
+	}
+	addItem =  function(MIDIChan, CCID, controlName, scaleToValue)
+	{
+		this.midiMapArray.push([MIDIChan, CCID, controlName, 0, 0, scaleToValue])
+		this.numberOfItems = this.midiMapArray.length;
+	}
+	scaleTo = function(value, scaleTo)
+	{
+		return (value/127)*scaleTo;
+	}
+	onMidiEvent = function(midiData)
+	{
+		//Hadnle Midi Keys
+		this.handleKeys(midiData.data[0], midiData.data[1], midiData.data[2]);
+		//Handle all other stored controlls
+		for(this.innerCounter=0; this.innerCounter<this.numberOfItems; this.innerCounter++)
+		{
+			if(midiData.data[0] == this.midiMapArray[this.innerCounter][0] && midiData.data[1] == this.midiMapArray[this.innerCounter][1])
+			{
+				//Actual midi value 0-127
+				this.midiMapArray[this.innerCounter][3] = midiData.data[2];
+				//scaled value for application use
+				this.midiMapArray[this.innerCounter][4] = this.scaleTo( midiData.data[2], this.midiMapArray[this.innerCounter][5] );
+				
+				//console.log(this.midiMapArray[this.innerCounter][2]+"->"+this.midiMapArray[this.innerCounter][3]+" "+this.midiMapArray[this.innerCounter][4]);
+				return;
+			}
+		}
+	}
+	setValue = function(controlName, value)
+	{
+		for(this.innerCounter=0; this.innerCounter<this.numberOfItems; this.innerCounter++)
+		{
+			if(this.midiMapArray[this.innerCounter][2]==controlName)
+			{
+				//Scaled value used by the application
+				this.midiMapArray[this.innerCounter][4] = value;
+				//Midi value 0-127 from the above scaled value
+				this.midiMapArray[this.innerCounter][3] = value*127;
+				return;
+			}
+		}
+	}
+	getValue = function(controlName)
+	{
+		for(this.innerCounter=0; this.innerCounter<this.numberOfItems; this.innerCounter++)
+		{
+			if(this.midiMapArray[this.innerCounter][2]==controlName)
+			{
+				return this.midiMapArray[this.innerCounter][4];
+			}
+		}
+	}
+	handleKeys = function(midiID, ccID, velocity)
+	{
+		if(ccID>=this.midiKeyRange[0] && ccID<=this.midiKeyRange[1])
+		{
+			if(midiID==144)
+			{
+				this.lastKeyHit = ccID;
+			}
+			else if (midiID==128)
+			{
+				this.lastKeyReleased = ccID;
+			}
+		}
+	}
+}
+
+class CCGenerator
+{	
+	constructor(maxValue, colourBlockCount, rgbColourArray)
+	{
+		this._primaryColours = new Array();
+		this._currentColour = [0,0,0];
+		this._colourTable = [[0,0,0],[0,0,0],[0,0,0]];
+		this._modifierTable = [[0,0,0],[0,0,0]];
+		this._colourBlockCount=0;
+		this._coloursPerBlock=0;
+		this._bandWidth=0;
+		this._cnt=0;
+		this._primColIndex=0;
+		this._rgba="";
+	
+		this._colourBlockCount = colourBlockCount;
+		this._primaryColours = new Array(this._colourBlockCount);
+		for(this._cnt=0; this._cnt<this._colourBlockCount; this._cnt++)
+	    {
+			this._primaryColours[this._cnt] = new Array(3);
+	    }
+		//Init the Colour Table
+		for(this._cnt=0; this._cnt<3; this._cnt++)
+		{
+			this._colourTable[this._cnt][0] = 0;
+			this._colourTable[this._cnt][1] = 0;
+			this._colourTable[this._cnt][2] = 0;
+		}
+		//Init the Modofier Table
+		for(this._cnt=0; this._cnt<2; this._cnt++)
+		{
+			this._modifierTable[this._cnt][0] = 0;
+			this._modifierTable[this._cnt][1] = 0;
+			this._modifierTable[this._cnt][2] = 0;
+		}	
+		//number of colours between 1 block and its neighbour    
+		this._coloursPerBlock = maxValue;
+		//Total number of colours in this spectrum
+		this._bandWidth = this._coloursPerBlock * this._colourBlockCount;
+		//Fill out primary colours based on array passed
+		for(this._cnt=0; this._cnt<colourBlockCount; this._cnt++)
+		{
+			this._primaryColours[this._cnt][0] = rgbColourArray[this._cnt*3];
+			this._primaryColours[this._cnt][1] = rgbColourArray[(this._cnt*3)+1];
+			this._primaryColours[this._cnt][2] = rgbColourArray[(this._cnt*3)+2];
+		}
+	}
+	
+	getColour = function(colourIndex)
+	{
+		this._primColIndex = Math.floor(colourIndex/this._coloursPerBlock) ;
+		this._colourTable[0][0] = this._primaryColours[this._primColIndex][0]; 
+		this._colourTable[0][1] = this._primaryColours[this._primColIndex][1];
+		this._colourTable[0][2] = this._primaryColours[this._primColIndex][2];
+		
+		this._colourTable[1][0] = this._primaryColours[(this._primColIndex+1)%this._colourBlockCount][0]; 
+		this._colourTable[1][1] = this._primaryColours[(this._primColIndex+1)%this._colourBlockCount][1]; 
+		this._colourTable[1][2] = this._primaryColours[(this._primColIndex+1)%this._colourBlockCount][2];
+				
+		this.gradientGenerator(colourIndex%this._coloursPerBlock, this._coloursPerBlock);
+		
+		this._currentColour[0] = this._colourTable[2][0];
+		this._currentColour[1] = this._colourTable[2][1];
+		this._currentColour[2] = this._colourTable[2][2];		
+	}
+	
+	getRGBA = function(colourIndex)
+	{
+		this.getColour(colourIndex);
+		this._rgba = 'rgba('+this._currentColour[0]+','+this._currentColour[1]+','+this._currentColour[2]+',1)';
+	}
+	
+	gradientGenerator = function(colourIndex, bandWidth)
+	{
+		for(this._cnt=0; this._cnt<3; this._cnt++)
+		{
+			//fill modifier
+			if(this._colourTable[1][this._cnt]>this._colourTable[0][this._cnt]) { this._modifierTable[0][this._cnt]=1; }
+			else if(this._colourTable[1][this._cnt]<this._colourTable[0][this.cnt]) { this._modifierTable[0][this._cnt]=-1; }
+			else if(this._colourTable[1][this._cnt]==this._colourTable[0][this._cnt]) { this._modifierTable[0][this._cnt]=0; }
+
+			//fill step value
+			if(this._modifierTable[0][this._cnt]==1)
+			{
+			 this._modifierTable[1][this._cnt] = this._colourTable[1][this._cnt] - this._colourTable[0][this._cnt];
+			}
+			else if(this._modifierTable[0][this._cnt]==-1)
+			{
+			  this._modifierTable[1][this._cnt] = this._colourTable[0][this._cnt] - this._colourTable[1][this._cnt];
+			}
+			else if(this._modifierTable[0][this._cnt]==0)
+			{
+			  this._modifierTable[1][this._cnt] = 0;
+			}
+			//calculate current gradient between 2 based on the percentile index
+			this._colourTable[2][this._cnt] = this._colourTable[0][this._cnt] + ((this._modifierTable[1][this._cnt]*(colourIndex/bandWidth))*this._modifierTable[0][this._cnt]);
+		}
+  }
+}
+
+//General Vars
+var screenDimensions = [window.innerWidth-40, window.innerHeight-40];
+var centrePoints = [0, 0];
+var slowCounter = 0, slowBy = 0.1;
+var spinTrackers = [0,0,0];
+
+//colours
+var maxValue = 255;
+var maxColourDitherSteps = 128;
+var colourList = [maxValue,0,0, maxValue,maxValue,0, 0,maxValue,0, 0,maxValue,maxValue, 0,0,maxValue, maxValue,0,maxValue, maxValue,maxValue,maxValue];
+var cIndex=0, cIncrement=1, innerCIndex=0;
+let cObjectOne = new CCGenerator(maxColourDitherSteps, 7, colourList);
+var colourObject;
+
+
+//Midi vars
+let MIDISTore = new MIDIMapper();
+var objectData = [0,0,0,0];
+var objectTrackers = new Array(3);
+
+
+//-------------MIDI FUNCTIONS--------------------------
+function onMIDISuccess(midiAccess)
+{
+    console.log(midiAccess);
+
+    var inputs = midiAccess.inputs;
+    var outputs = midiAccess.outputs;
+	
+	for(var input of midiAccess.inputs.values())
+	{
+        input.onmidimessage = getMIDIMessage;
+    }
+}
+function onMIDIFailure()
+{
+    console.log('Could not access your MIDI devices.');
+}
+function getMIDIMessage(midiMessage) 
+{
+	//console.log(midiMessage.data[0]+" "+midiMessage.data[1]+" "+midiMessage.data[2]);
+	MIDISTore.onMidiEvent(midiMessage)
+}
+//-------------MIDI FUNCTIONS--------------------------
+
+function setup() 
+{
+	createCanvas(screenDimensions[0], screenDimensions[1], WEBGL, document.getElementById('mainCanvas'));
+	navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
+	
+	//setup what midi controlls to use
+	MIDISTore.addItem(176,1,"colourIncrement", 100);
+	MIDISTore.setValue("colourIncrement", 1);
+	MIDISTore.addItem(176,2,"subColourIncrement", 100);
+	MIDISTore.setValue("subColourIncrement", 1);
+	MIDISTore.addItem(176,3,"objectRadius", 2000);
+	MIDISTore.setValue("objectRadius", 500);
+	MIDISTore.addItem(176,4,"numberOfObjectsPer", 500);
+	MIDISTore.setValue("numberOfObjectsPer", 180);
+
+	MIDISTore.addItem(176,5,"objectWidth", 200);
+	MIDISTore.setValue("objectWidth", 20);
+	MIDISTore.addItem(176,6,"objectHeight", 200);
+	MIDISTore.setValue("objectHeight", 20);
+	MIDISTore.addItem(176,7,"objectDepth", 200);
+	MIDISTore.setValue("objectDepth", 20);
+
+	MIDISTore.addItem(176,8,"keyFader", 20);
+	MIDISTore.setValue("keyFader", 1);
+	MIDISTore.addItem(176,17,"keyModulus", 180);
+	MIDISTore.setValue("keyModulus", 64);
+
+
+	MIDISTore.addItem(176,9,"spinSpeed_1", 10);
+	MIDISTore.setValue("spinSpeed_1", 0);
+	MIDISTore.addItem(176,10,"spinSpeed_2", 10);
+	MIDISTore.setValue("spinSpeed_2", 0);
+	MIDISTore.addItem(176,11,"spinSpeed_3", 10);
+	MIDISTore.setValue("spinSpeed_3", 0);
+	
+
+	//add object trackers for rendering
+	objectTrackers[0] = new objectTracker(MIDISTore.getValue('numberOfObjectsPer'));
+	objectTrackers[1] = new objectTracker(MIDISTore.getValue('numberOfObjectsPer'));
+	objectTrackers[2] = new objectTracker(MIDISTore.getValue('numberOfObjectsPer'));
+	colourObject = color(0, 0, 0, 0);
+}
+
+function draw() 
+{
+	var oCounter=0, innerOCounter=0;
+	var numberOfItemsPerRing=0;
+	
+	background(0);
+	orbitControl();
+	ambientLight(255);
+	
+	//set up objects Array
+	if(objectTrackers[0].numberOfItems!=MIDISTore.getValue('numberOfObjectsPer'))
+	{
+		objectTrackers[0].newSize(MIDISTore.getValue('numberOfObjectsPer'));
+		objectTrackers[1].newSize(MIDISTore.getValue('numberOfObjectsPer'));
+		objectTrackers[2].newSize(MIDISTore.getValue('numberOfObjectsPer'));
+	}
+	
+	innerCIndex=cIndex;
+	numberOfItemsPerRing = objectTrackers[0].numberOfItems;
+	
+	for(oCounter=0; oCounter<numberOfItemsPerRing; oCounter++)
+	{
+		for(innerOCounter=0; innerOCounter<objectTrackers.length; innerOCounter++)
+		{
+			objectTrackers[innerOCounter].objectArray[oCounter][7] = MIDISTore.getValue('objectWidth');
+			objectTrackers[innerOCounter].objectArray[oCounter][8] = MIDISTore.getValue('objectHeight');
+			
+			if(MIDISTore.lastKeyHit!=0 && (oCounter%Math.round(MIDISTore.getValue('keyModulus')))==0)
+			{
+				objectTrackers[innerOCounter].objectArray[oCounter][9] = MIDISTore.getValue('objectDepth')*10;
+			}
+			else if(objectTrackers[innerOCounter].objectArray[oCounter][9]>MIDISTore.getValue('objectDepth'))
+			{
+			}
+			else
+			{
+				objectTrackers[innerOCounter].objectArray[oCounter][9] = MIDISTore.getValue('objectDepth');
+			}
+			
+		}
+	}
+	if(MIDISTore.lastKeyHit!=0)
+	{
+		MIDISTore.lastKeyHit=0;
+	}
+	
+
+	//Ring 1
+	for(oCounter=0; oCounter<numberOfItemsPerRing; oCounter++)
+	{
+		//---------------RING 1---------------
+		//position
+		centrePoints = getCircularPoints(0, 0, MIDISTore.getValue('objectRadius'), (((360/numberOfItemsPerRing)*oCounter)+spinTrackers[0])%360 );
+		objectTrackers[0].objectArray[oCounter][0] = centrePoints[0];
+		objectTrackers[0].objectArray[oCounter][1] = centrePoints[1];
+		objectTrackers[0].objectArray[oCounter][2] = 0;
+		//colour
+		cObjectOne.getColour(innerCIndex%cObjectOne._bandWidth);
+		innerCIndex += MIDISTore.getValue('subColourIncrement');
+		objectTrackers[0].setColour(oCounter, cObjectOne._currentColour[0], cObjectOne._currentColour[1], cObjectOne._currentColour[2], 255);
+		colourObject.setRed(objectTrackers[0].objectArray[oCounter][3]);
+		colourObject.setGreen(objectTrackers[0].objectArray[oCounter][4]);
+		colourObject.setBlue(objectTrackers[0].objectArray[oCounter][5]);
+		colourObject.setAlpha(objectTrackers[0].objectArray[oCounter][6]);
+		//render
+		push();
+		translate(objectTrackers[0].objectArray[oCounter][0],objectTrackers[0].objectArray[oCounter][1],objectTrackers[0].objectArray[oCounter][2]);
+		fill(colourObject);
+		box(objectTrackers[0].objectArray[oCounter][7],objectTrackers[0].objectArray[oCounter][8],objectTrackers[0].objectArray[oCounter][9]);
+		pop();
+	}
+	//Ring 2
+	for(oCounter=0; oCounter<numberOfItemsPerRing; oCounter++)
+	{
+		//---------------RING 1---------------
+		//position
+		centrePoints = getCircularPoints(0, 0, MIDISTore.getValue('objectRadius'), (((360/numberOfItemsPerRing)*oCounter)+spinTrackers[1])%360 );
+		objectTrackers[1].objectArray[oCounter][0] = 0;
+		objectTrackers[1].objectArray[oCounter][1] = centrePoints[0];
+		objectTrackers[1].objectArray[oCounter][2] = centrePoints[1];
+		//colour
+		cObjectOne.getColour(innerCIndex%cObjectOne._bandWidth);
+		innerCIndex += MIDISTore.getValue('subColourIncrement');
+		objectTrackers[1].setColour(oCounter, cObjectOne._currentColour[0], cObjectOne._currentColour[1], cObjectOne._currentColour[2], 255);
+		colourObject.setRed(objectTrackers[1].objectArray[oCounter][3]);
+		colourObject.setGreen(objectTrackers[1].objectArray[oCounter][4]);
+		colourObject.setBlue(objectTrackers[1].objectArray[oCounter][5]);
+		colourObject.setAlpha(objectTrackers[1].objectArray[oCounter][6]);
+		//render
+		push();
+		translate(objectTrackers[1].objectArray[oCounter][0],objectTrackers[1].objectArray[oCounter][1],objectTrackers[1].objectArray[oCounter][2]);
+		fill(colourObject);
+		box(objectTrackers[1].objectArray[oCounter][7],objectTrackers[1].objectArray[oCounter][8],objectTrackers[1].objectArray[oCounter][9]);
+		pop();
+	}
+	//Ring 3
+	for(oCounter=0; oCounter<numberOfItemsPerRing; oCounter++)
+	{
+		//---------------RING 1---------------
+		//position
+		centrePoints = getCircularPoints(0, 0, MIDISTore.getValue('objectRadius'), (((360/numberOfItemsPerRing)*oCounter)+spinTrackers[2])%360 );
+		objectTrackers[2].objectArray[oCounter][0] = centrePoints[0];
+		objectTrackers[2].objectArray[oCounter][1] = 0;
+		objectTrackers[2].objectArray[oCounter][2] = centrePoints[1];
+		//colour
+		cObjectOne.getColour(innerCIndex%cObjectOne._bandWidth);
+		innerCIndex += MIDISTore.getValue('subColourIncrement');
+		objectTrackers[2].setColour(oCounter, cObjectOne._currentColour[0], cObjectOne._currentColour[1], cObjectOne._currentColour[2], 255);
+		colourObject.setRed(objectTrackers[2].objectArray[oCounter][3]);
+		colourObject.setGreen(objectTrackers[2].objectArray[oCounter][4]);
+		colourObject.setBlue(objectTrackers[2].objectArray[oCounter][5]);
+		colourObject.setAlpha(objectTrackers[2].objectArray[oCounter][6]);
+		//render
+		push();
+		translate(objectTrackers[2].objectArray[oCounter][0],objectTrackers[2].objectArray[oCounter][1],objectTrackers[2].objectArray[oCounter][2]);
+		fill(colourObject);
+		box(objectTrackers[2].objectArray[oCounter][7],objectTrackers[2].objectArray[oCounter][8],objectTrackers[2].objectArray[oCounter][9]);
+		pop();
+	}
+	
+		
+	cIndex += MIDISTore.getValue('colourIncrement');
+	spinTrackers[0] += MIDISTore.getValue('spinSpeed_1');
+	spinTrackers[1] += MIDISTore.getValue('spinSpeed_2');
+	spinTrackers[2] += MIDISTore.getValue('spinSpeed_3');
+	
+	//slowCounter = frameCount * MIDISTore.getValue("slowBy");
+	
+	//motion and fades
+	for(oCounter=0; oCounter<numberOfItemsPerRing; oCounter++)
+	{
+		for(innerOCounter=0; innerOCounter<objectTrackers.length; innerOCounter++)
+		{
+			if(objectTrackers[innerOCounter].objectArray[oCounter][9]>MIDISTore.getValue('objectDepth') && MIDISTore.getValue('keyFader')<objectTrackers[innerOCounter].objectArray[oCounter][9])
+			{
+				objectTrackers[innerOCounter].objectArray[oCounter][9]-=MIDISTore.getValue('keyFader');
+			}
+			else if(objectTrackers[innerOCounter].objectArray[oCounter][9]>MIDISTore.getValue('objectDepth') && MIDISTore.getValue('keyFader')>=objectTrackers[innerOCounter].objectArray[oCounter][9])
+			{
+				objectTrackers[innerOCounter].objectArray[oCounter][9]=MIDISTore.getValue('objectDepth');
+			}
+		}
+			
+		
+	}
+}
+
+function getCircularPoints(circleX, circleY, circleR, angleFromTopLeftoRight)
+{
+	var circCoOrds = [0, 0];
+	circCoOrds[0] = circleX + Math.sin(angleFromTopLeftoRight*(Math.PI / 180))*circleR ;
+	circCoOrds[1] = circleY - Math.cos(angleFromTopLeftoRight*(Math.PI / 180))*circleR;
+	return circCoOrds;
+}
+
+
+</script>
+</html> 
