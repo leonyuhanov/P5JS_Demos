@@ -9,3 +9,5 @@ A collection of interactive visuals made with P5JS
   - Intercative MIDI visualiser, rendres a flowing stream of boxes when midi kes are hit, with heaps of modulators via midi CV 
 - spin.html
   - Intercative MIDI visualiser v0, tests tests tests
+- boxRain_AudioIn.html
+  - AUdio recative version, uses WEB Audio API. This MUST be laoded via an HTTPS connection
